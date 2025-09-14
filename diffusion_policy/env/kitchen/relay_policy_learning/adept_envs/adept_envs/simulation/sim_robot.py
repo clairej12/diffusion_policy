@@ -58,6 +58,7 @@ class MujocoSimRobot:
             if model_file.endswith('.mjb'):
                 self.sim = dm_mujoco.Physics.from_binary_path(model_file)
             else:
+                print(f"[MujocoSimRobot] Loading model from XML: {model_file}")
                 self.sim = dm_mujoco.Physics.from_xml_path(model_file)
             self.model = self.sim.model
             self._patch_mjlib_accessors(self.model, self.sim.data)

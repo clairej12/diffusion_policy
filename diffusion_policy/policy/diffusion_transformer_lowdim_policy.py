@@ -69,6 +69,7 @@ class DiffusionTransformerLowdimPolicy(BaseLowdimPolicy):
     
         # set step values
         scheduler.set_timesteps(self.num_inference_steps)
+        all_scores = []
 
         for t in scheduler.timesteps:
             # 1. apply conditioning
@@ -76,6 +77,14 @@ class DiffusionTransformerLowdimPolicy(BaseLowdimPolicy):
 
             # 2. predict model output
             model_output = model(trajectory, t, cond)
+
+            sigma_t = scheduler._get_variance(t).sqrt()  # variance is beta_t^2
+            score_t = -model_output / sigma_t**2
+
+            if t > self.num_inference_steps//3:
+                if score_t.mean().item() > 1e6 or score_t.mean().item() < -1e6:
+                    print(f"Warning: score_t mean is {score_t.mean().item()} at timestep {t}.")
+                all_scores.append(score_t.detach().cpu())
 
             # 3. compute previous image: x_t -> x_t-1
             trajectory = scheduler.step(
@@ -85,9 +94,10 @@ class DiffusionTransformerLowdimPolicy(BaseLowdimPolicy):
                 ).prev_sample
         
         # finally make sure conditioning is enforced
-        trajectory[condition_mask] = condition_data[condition_mask]        
+        trajectory[condition_mask] = condition_data[condition_mask]  
+        score_mean = torch.stack(all_scores, dim=0).mean(dim=0)        
 
-        return trajectory
+        return trajectory, score_mean
 
 
     def predict_action(self, obs_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
@@ -129,7 +139,7 @@ class DiffusionTransformerLowdimPolicy(BaseLowdimPolicy):
             cond_mask[:,:To,Da:] = True
 
         # run sampling
-        nsample = self.conditional_sample(
+        nsample, scores = self.conditional_sample(
             cond_data, 
             cond_mask,
             cond=cond,
@@ -146,11 +156,16 @@ class DiffusionTransformerLowdimPolicy(BaseLowdimPolicy):
             start = To - 1
             end = start + self.n_action_steps
             action = action_pred[:,start:end]
+            scores = scores[:,start:end]
         
         result = {
             'action': action,
-            'action_pred': action_pred
+            'action_pred': action_pred,
+            'scores': scores
         }
+
+        print(f'Truncated scores mean: {scores.mean().item()}')
+        
         if not self.obs_as_cond:
             nobs_pred = nsample[...,Da:]
             obs_pred = self.normalizer['obs'].unnormalize(nobs_pred)

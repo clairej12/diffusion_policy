@@ -134,7 +134,8 @@ class PushTEnv(gym.Env):
 
         observation = self._get_obs()
         info = self._get_info()
-
+        # print(f'Final Final observation shape: {observation.shape}')
+        # print(f'Final Final observation: {observation}')
         return observation, reward, done, info
 
     def render(self, mode):
@@ -156,6 +157,7 @@ class PushTEnv(gym.Env):
             tuple(self.agent.position) \
             + tuple(self.block.position) \
             + (self.block.angle % (2 * np.pi),))
+        # print('PushT obs shape:', obs.shape)
         return obs
 
     def _get_goal_pose_body(self, pose):

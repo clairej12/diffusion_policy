@@ -42,7 +42,9 @@ class KitchenLowdimRunner(BaseLowdimRunner):
             tqdm_interval_sec=5.0,
             abs_action=False,
             robot_noise_ratio=0.1,
-            n_envs=None
+            n_envs=None,
+            n_seeds=1,
+            num_candidates_per_step=200
         ):
         super().__init__(output_dir)
 
@@ -124,7 +126,10 @@ class KitchenLowdimRunner(BaseLowdimRunner):
 
         # test
         for i in range(n_test):
-            seed = test_start_seed + i
+            if n_seeds is None:
+                seed = test_start_seed + i
+            else:
+                seed = test_start_seed + (i % n_seeds)
             enable_render = i < n_test_vis
 
             def init_fn(env, seed=seed, enable_render=enable_render):
@@ -191,7 +196,7 @@ class KitchenLowdimRunner(BaseLowdimRunner):
         self.past_action = past_action
         self.max_steps = max_steps
         self.tqdm_interval_sec = tqdm_interval_sec
-
+        self.num_candidates_per_step = num_candidates_per_step
 
     def run(self, policy: BaseLowdimPolicy):
         device = policy.device
@@ -202,11 +207,13 @@ class KitchenLowdimRunner(BaseLowdimRunner):
         n_envs = len(self.env_fns)
         n_inits = len(self.env_init_fn_dills)
         n_chunks = math.ceil(n_inits / n_envs)
+        print(f"Running {n_inits} initial conditions with {n_envs} envs in {n_chunks} chunks.")
 
         # allocate data
         all_video_paths = [None] * n_inits
         all_rewards = [None] * n_inits
         last_info = [None] * n_inits
+        all_trajectories = []
 
         for chunk_idx in range(n_chunks):
             start = chunk_idx * n_envs
@@ -214,6 +221,14 @@ class KitchenLowdimRunner(BaseLowdimRunner):
             this_global_slice = slice(start, end)
             this_n_active_envs = end - start
             this_local_slice = slice(0,this_n_active_envs)
+
+            traj_data = [{
+                'positions': [],
+                'actions': [],
+                'scores': [],
+                'candidates': [],
+                'rewards': []
+            } for _ in range(this_n_active_envs)]
             
             this_init_fns = self.env_init_fn_dills[this_global_slice]
             n_diff = n_envs - len(this_init_fns)
@@ -248,17 +263,40 @@ class KitchenLowdimRunner(BaseLowdimRunner):
                         device=device))
 
                 # run policy
-                with torch.no_grad():
-                    action_dict = policy.predict_action(obs_dict)
+                action_candidates = []
+                score_candidates = []
+                for _ in range(self.num_candidates_per_step):
+                    with torch.no_grad():
+                        action_dict = policy.predict_action(obs_dict)
 
-                # device_transfer
-                np_action_dict = dict_apply(action_dict,
-                    lambda x: x.detach().to('cpu').numpy())
+                    # device_transfer
+                    np_action_dict = dict_apply(action_dict,
+                        lambda x: x.detach().to('cpu').numpy())
 
-                action = np_action_dict['action']
+                    action = np_action_dict['action']
+                    score = np_action_dict['scores']
+                    print(f'Scores mean: {score.mean()}, std: {score.std()}')
+
+                    score_candidates.append(score)
+                    action_candidates.append(action)
+
+                for i in range(this_n_active_envs):
+                    traj_data[i]['actions'].append(action[i])
+                    traj_data[i]['scores'].append(score[i])
+                    traj_data[i]['candidates'].append({
+                        "action_candidates": [ac[i] for ac in action_candidates],
+                        "score_candidates": [asc[i] for asc in score_candidates],
+                    })
 
                 # step env
                 obs, reward, done, info = env.step(action)
+
+                for i in range(this_n_active_envs):
+                    traj_data[i]['positions'].append(obs[i])
+                
+                for i in range(this_n_active_envs):
+                    traj_data[i]['rewards'].append(reward[i])
+
                 done = np.all(done)
                 past_action = action
 
@@ -270,6 +308,12 @@ class KitchenLowdimRunner(BaseLowdimRunner):
             all_video_paths[this_global_slice] = env.render()[this_local_slice]
             all_rewards[this_global_slice] = env.call('get_attr', 'reward')[this_local_slice]
             last_info[this_global_slice] = [dict((k,v[-1]) for k, v in x.items()) for x in info][this_local_slice]
+
+            # Convert to arrays
+            for i in range(this_n_active_envs):
+                for k in traj_data[i]:
+                    traj_data[i][k] = np.stack(traj_data[i][k])
+                all_trajectories.append(traj_data[i])
 
         # reward is number of tasks completed, max 7
         # use info to record the order of task completion?
@@ -303,6 +347,10 @@ class KitchenLowdimRunner(BaseLowdimRunner):
                 sim_video = wandb.Video(video_path)
                 log_data[prefix+f'sim_video_{seed}'] = sim_video
 
+            all_trajectories[i]['seed'] = seed
+            all_trajectories[i]['video_path'] = video_path
+            all_trajectories[i]['prefix'] = prefix
+
         # log aggregate metrics
         for prefix, value in prefix_total_reward_map.items():
             name = prefix+'mean_score'
@@ -316,4 +364,7 @@ class KitchenLowdimRunner(BaseLowdimRunner):
                 name = prefix + f'p_{n}'
                 log_data[name] = p_n
 
-        return log_data
+        return {
+            "log_data": log_data,
+            "trajectories": all_trajectories
+        }

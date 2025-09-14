@@ -3,6 +3,7 @@ from gym import spaces
 from diffusion_policy.env.pusht.pusht_env import PushTEnv
 from diffusion_policy.env.pusht.pymunk_keypoint_manager import PymunkKeypointManager
 import numpy as np
+import pdb
 
 class PushTKeypointsEnv(PushTEnv):
     def __init__(self,
@@ -103,23 +104,36 @@ class PushTKeypointsEnv(PushTEnv):
             draw_kp_map['agent'] = vis_kps[len(kp_map['block']):]
         self.draw_kp_map = draw_kp_map
         
+        # print('Len of block kps:', len(kp_map['block']))
+        # if self.agent_keypoints:
+        #     print('Len of agent kps:', len(kp_map['agent']))
+        # print('kps shape: ', kps.shape)
+        # print('kps mask shape: ', kps_mask.shape)
+        # print('Visible kps shape: ', visible_kps.shape)
+
         # construct obs
         obs = kps.flatten()
+        # print('Obs shape:', obs.shape)
         obs_mask = kps_mask.flatten()
+        # print('Obs mask shape:', obs_mask.shape)
         if not self.agent_keypoints:
             # passing agent position when keypoints are not available
             agent_pos = np.array(self.agent.position)
+            # print('Agent position shape:', agent_pos.shape)
             obs = np.concatenate([
                 obs, agent_pos
             ])
+            # print('Obs shape after adding agent pos:', obs.shape)
             obs_mask = np.concatenate([
                 obs_mask, np.ones((2,), dtype=bool)
             ])
+            # print('Obs mask shape after adding agent pos:', obs_mask.shape)
 
         # obs, obs_mask
         obs = np.concatenate([
             obs, obs_mask.astype(obs.dtype)
         ], axis=0)
+        # print('Final obs shape:', obs.shape)
         return obs
     
     
