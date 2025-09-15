@@ -341,6 +341,11 @@ class KitchenLowdimRunner(BaseLowdimRunner):
             n_completed_tasks = len(last_info[i]['completed_tasks'])
             prefix_n_completed_map[prefix].append(n_completed_tasks)
 
+            success = (n_completed_tasks == 7)   # or another threshold you want
+            all_trajectories[i]['success'] = success
+            all_trajectories[i]['n_completed_tasks'] = n_completed_tasks
+
+
             # visualize sim
             video_path = all_video_paths[i]
             if video_path is not None:
