@@ -44,7 +44,7 @@ class KitchenLowdimRunner(BaseLowdimRunner):
             robot_noise_ratio=0.1,
             n_envs=None,
             n_seeds=1,
-            num_candidates_per_step=200
+            num_candidates_per_step=1
         ):
         super().__init__(output_dir)
 
@@ -198,7 +198,7 @@ class KitchenLowdimRunner(BaseLowdimRunner):
         self.tqdm_interval_sec = tqdm_interval_sec
         self.num_candidates_per_step = num_candidates_per_step
 
-    def run(self, policy: BaseLowdimPolicy):
+    def run(self, policy: BaseLowdimPolicy, delay_multimodal_rollout=0):
         device = policy.device
         dtype = policy.dtype
         env = self.env
@@ -275,7 +275,7 @@ class KitchenLowdimRunner(BaseLowdimRunner):
 
                     action = np_action_dict['action']
                     score = np_action_dict['scores']
-                    print(f'Scores mean: {score.mean()}, std: {score.std()}')
+                    # print(f'Scores mean: {score.mean()}, std: {score.std()}')
 
                     score_candidates.append(score)
                     action_candidates.append(action)
@@ -290,6 +290,7 @@ class KitchenLowdimRunner(BaseLowdimRunner):
 
                 # step env
                 obs, reward, done, info = env.step(action)
+                # print(f"Done: {done}")
 
                 for i in range(this_n_active_envs):
                     traj_data[i]['positions'].append(obs[i])
@@ -309,10 +310,12 @@ class KitchenLowdimRunner(BaseLowdimRunner):
             all_rewards[this_global_slice] = env.call('get_attr', 'reward')[this_local_slice]
             last_info[this_global_slice] = [dict((k,v[-1]) for k, v in x.items()) for x in info][this_local_slice]
 
+            print(f"n_completed_tasks: {[len(x['completed_tasks']) for x in last_info[this_global_slice]]}")
+
             # Convert to arrays
             for i in range(this_n_active_envs):
-                for k in traj_data[i]:
-                    traj_data[i][k] = np.stack(traj_data[i][k])
+                # for k in traj_data[i]:
+                #     traj_data[i][k] = np.stack(traj_data[i][k])
                 all_trajectories.append(traj_data[i])
 
         # reward is number of tasks completed, max 7
@@ -338,13 +341,14 @@ class KitchenLowdimRunner(BaseLowdimRunner):
             total_reward = np.sum(this_rewards) / 7
             prefix_total_reward_map[prefix].append(total_reward)
 
-            n_completed_tasks = len(last_info[i]['completed_tasks'])
+            completed_tasks = last_info[i]['completed_tasks']
+            n_completed_tasks = len(completed_tasks)
             prefix_n_completed_map[prefix].append(n_completed_tasks)
 
-            success = (n_completed_tasks == 7)   # or another threshold you want
+            success = (n_completed_tasks > 4)   # or another threshold you want
             all_trajectories[i]['success'] = success
             all_trajectories[i]['n_completed_tasks'] = n_completed_tasks
-
+            all_trajectories[i]['completed_tasks'] = completed_tasks
 
             # visualize sim
             video_path = all_video_paths[i]

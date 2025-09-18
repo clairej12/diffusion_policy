@@ -185,6 +185,10 @@ class PushTKeypointsRunner(BaseLowdimRunner):
         all_rewards = [None] * n_inits
         all_trajectories = []
 
+        if delay_multimodal_rollout > 0:
+            actions_recording = []
+            observations_recording = []
+
         for chunk_idx in range(n_chunks):
             start = chunk_idx * n_envs
             end = min(n_inits, start + n_envs)
@@ -269,7 +273,9 @@ class PushTKeypointsRunner(BaseLowdimRunner):
                     scores = np_action_dict['scores'][:,self.n_latency_steps:]
                     # print(f'Scores mean: {scores.mean()}, std: {scores.std()}')
                     if delay_multimodal_rollout > 0 and timestep < delay_multimodal_rollout:
-                        action = np.repeat(action[0][None, :], this_n_active_envs, axis=0)
+                        action = np.repeat(action[0][None, :], obs.shape[0], axis=0)
+                        if chunk_idx > 0:
+                            action = actions_recording[timestep]
                     if cand == 0:
                         actions_to_apply.append(action)
                         actions_to_apply_scores.append(scores)
@@ -331,6 +337,11 @@ class PushTKeypointsRunner(BaseLowdimRunner):
                         if not np.allclose(obs, obs[0]):  # check all envs' obs match the first
                             print("Mismatch in observations across environments!", obs)
                             pdb.set_trace()
+                        if chunk_idx == 0:
+                            observations_recording.append(obs)
+                            actions_recording.append(action)
+                        if chunk_idx > 0:
+                            obs = observations_recording[timestep]
 
                     for i in range(this_n_active_envs):
                         traj_data[i]['positions'].append(obs[i])

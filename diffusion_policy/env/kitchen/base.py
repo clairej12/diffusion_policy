@@ -57,6 +57,7 @@ class KitchenBase(KitchenTaskRelaxV1):
         **kwargs
     ):
         self.tasks_to_complete = list(self.TASK_ELEMENTS)
+        print(f"Tasks to complete: self.tasks_to_complete")
         self.goal_masking = True
         super(KitchenBase, self).__init__(use_abs_action=use_abs_action, **kwargs)
 
@@ -104,7 +105,7 @@ class KitchenBase(KitchenTaskRelaxV1):
                 else complete
             )
             if condition:  # element == self.tasks_to_complete[0]:
-                print("Task {} completed!".format(element))
+                # print("Task {} completed!".format(element))
                 completions.append(element)
             all_completed_so_far = all_completed_so_far and complete
         if self.REMOVE_TASKS_WHEN_COMPLETE:
@@ -131,6 +132,8 @@ class KitchenBase(KitchenTaskRelaxV1):
         env_info["completed_tasks"] = set(self.TASK_ELEMENTS) - set(
             self.tasks_to_complete
         )
+        # print(f"Completed tasks: {env_info['completed_tasks']}\nTasks left: {self.tasks_to_complete}")
+        # print(f"Done? {done}")
         return obs, reward, done, env_info
 
     def get_goal(self):

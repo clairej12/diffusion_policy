@@ -164,7 +164,7 @@ class DiffusionTransformerLowdimPolicy(BaseLowdimPolicy):
             'scores': scores
         }
 
-        print(f'Truncated scores mean: {scores.mean().item()}')
+        # print(f'Truncated scores mean: {scores.mean().item()}')
         
         if not self.obs_as_cond:
             nobs_pred = nsample[...,Da:]

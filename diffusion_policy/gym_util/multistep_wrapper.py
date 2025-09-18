@@ -113,6 +113,7 @@ class MultiStepWrapper(gym.Wrapper):
             if (self.max_episode_steps is not None) \
                 and (len(self.reward) >= self.max_episode_steps):
                 # truncation
+                # print("Truncating episode due to max steps: ", self.max_episode_steps)
                 done = True
             self.done.append(done)
             self._add_info(info)

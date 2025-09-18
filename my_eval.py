@@ -68,12 +68,13 @@ def run_experiment(policy, env_runner, output_dir, multimodal_start_idx=0, eta=N
 @click.option('--n_envs', type=int, default=None)
 @click.option('--n_test', type=int, default=None)
 @click.option('--n_train', type=int, default=None)
+@click.option('--max_steps', type=int, default=None)
 def main(checkpoint, output_dir, device,
          use_ddim, fixed_start_noise,
          vary_eta,
          delay_multimodal_rollout,
          vary_eps0_variance,
-         n_envs, n_test, n_train):
+         n_envs, n_test, n_train, max_steps):
 
     if os.path.exists(output_dir):
         click.confirm(f"Output path {output_dir} already exists! Overwrite?", abort=True)
@@ -90,6 +91,8 @@ def main(checkpoint, output_dir, device,
         cfg.task.env_runner.n_test = n_test
     if n_train is not None:
         cfg.task.env_runner.n_train = n_train
+    if max_steps is not None:
+        cfg.task.env_runner.max_steps = max_steps
 
     # switch scheduler if requested
     if use_ddim:
@@ -142,6 +145,7 @@ def main(checkpoint, output_dir, device,
     elif delay_multimodal_rollout:
         step_list = [7, 14, 21, 28]
         for step in step_list:
+            print(f"Running multimodal rollout with {step} steps of delay...")
             subdir = os.path.join(output_dir, f"multimodal_{step}")
             pathlib.Path(subdir).mkdir(parents=True, exist_ok=True)
             run_experiment(policy, env_runner, subdir, multimodal_start_idx=step)
