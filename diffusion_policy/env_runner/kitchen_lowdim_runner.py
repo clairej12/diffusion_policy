@@ -8,6 +8,7 @@ import dill
 import math
 import logging
 import wandb.sdk.data_types.video as wv
+import pdb
 import gym
 import gym.spaces
 import multiprocessing as mp
@@ -141,9 +142,19 @@ class KitchenLowdimRunner(BaseLowdimRunner):
                 env.env.file_path = None
                 if enable_render:
                     filename = pathlib.Path(output_dir).joinpath(
-                        'media', wv.util.generate_id() + ".mp4")
+                        'media', wv.util.generate_id() + f"_{i}.mp4")
                     filename.parent.mkdir(parents=False, exist_ok=True)
                     filename = str(filename)
+
+                    # Recreate a fresh recorder
+                    env.env.video_recoder = VideoRecorder.create_h264(
+                        fps=fps,
+                        codec='h264',
+                        input_pix_fmt='rgb24',
+                        crf=crf,
+                        thread_type='FRAME',
+                        thread_count=1
+                    )
                     env.env.file_path = filename
 
                 # set initial condition
@@ -310,7 +321,8 @@ class KitchenLowdimRunner(BaseLowdimRunner):
             all_rewards[this_global_slice] = env.call('get_attr', 'reward')[this_local_slice]
             last_info[this_global_slice] = [dict((k,v[-1]) for k, v in x.items()) for x in info][this_local_slice]
 
-            print(f"n_completed_tasks: {[len(x['completed_tasks']) for x in last_info[this_global_slice]]}")
+            # pdb.set_trace()
+            # print(f"completed tasks: {[x['completed_tasks'] for x in last_info[this_global_slice]]}")
 
             # Convert to arrays
             for i in range(this_n_active_envs):
@@ -344,6 +356,9 @@ class KitchenLowdimRunner(BaseLowdimRunner):
             completed_tasks = last_info[i]['completed_tasks']
             n_completed_tasks = len(completed_tasks)
             prefix_n_completed_map[prefix].append(n_completed_tasks)
+
+            print(f"video path: {all_video_paths[i]}")
+            print(f"completed tasks: {completed_tasks}")
 
             success = (n_completed_tasks > 4)   # or another threshold you want
             all_trajectories[i]['success'] = success
